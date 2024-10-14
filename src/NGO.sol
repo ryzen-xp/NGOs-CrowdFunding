@@ -2,160 +2,158 @@
 pragma solidity ^0.8.27;
 
 contract NGO_Funding {
+
     address public admin;
-    uint256 public idx;
+    uint immutable duration = 0 days;
 
-    // Constructor sets the admin
-    constructor(uint256 _count) {
+    constructor(uint _count) {
         admin = msg.sender;
-        idx = _count;
+        duration = _count;
     }
 
-    // Modifier to allow only the NGO owner to call certain functions
-    modifier onlyNgo(uint256 _idx) {
-        require(NGOs[_idx].owner == msg.sender, "Only the NGO owner can call this function");
+    event NGORegistered(address indexed NGO_owner, uint index, string uri);
+    event DonationMade(address indexed donor, address indexed NGO_owner, uint amount);
+    event RequestCreated(address indexed NGO_owner, uint indexed requestIdx, string uri, uint amount);
+    event VoteCast(address indexed voter, uint indexed requestIdx, bool voteYes, uint voteWeight);
+    event RequestFinalized(uint indexed requestIdx, bool approved);
+
+    modifier onlyNgo() {
+        require(NGOs[msg.sender].isRegistered, "Only NGO owner can call this function");
         _;
     }
 
-    modifier onlyDonor(uint256 _idx) {
-        require(Donations[msg.sender][_idx] > 0, "Not donor");
+    modifier onlyDonor(address _ngo) {
+        require(Donations[msg.sender][_ngo] != 0, "Not a donor");
         _;
     }
 
-    // Struct to define NGO properties
     struct NGO {
         string uri;
         address owner;
         uint256 totalDonor;
-        address[] donors;
-        uint256[] donation;
         uint256 totalValue;
         bool isRegistered;
         bool blacklisted;
+        address[] donors;
     }
 
-    // Struct for Request properties with added voting features
+    struct donor {
+        address[] ngos;
+    }
+
     struct Request {
         string uri;
         uint256 amount;
         address recipient;
         bool completed;
         bool approval;
-        uint256 yesVotes; // Total weight of yes votes
-        uint256 noVotes; // Total weight of no votes
-        uint256 startTime; // Voting start time
-        uint256 endTime; // Voting end time (2 days)
-        mapping(address => bool) approvals; // Donor addresses who voted
+        uint256 yesVotes;
+        uint256 noVotes;
+        uint256 startTime;
+        uint256 endTime;
         bool finalized;
+        mapping(address => bool) approvals;
     }
 
-    mapping(uint256 => NGO) public NGOs;
+    mapping(address => NGO) public NGOs;
+    mapping(address => donor) private Donors; // Keep private, but simulate public access with getters
+    mapping(address => mapping(address => uint256)) public Donations;
+    mapping(address => Request[]) public Requests;
 
-    // Mapping of donor donations
-    mapping(address => mapping(uint256 => uint256)) public Donations;
+    // Custom getter for Donors mapping
+    function getDonorInfo() external view returns (address[] memory) {
+        return Donors[msg.sender].ngos;
+    }
 
-    Request[] public requests;
+  
 
-    // Function to register an NGO
-    function register(string calldata _uri) external returns (uint256 _idx) {
-        ++idx;
-        NGO storage newNGO = NGOs[idx];
-        require(!newNGO.isRegistered, "NGO already registered");
+    function register(string calldata _uri) external {
+        require(!NGOs[msg.sender].isRegistered, "NGO already registered");
 
+        NGO storage newNGO = NGOs[msg.sender];
         newNGO.uri = _uri;
         newNGO.owner = msg.sender;
-        newNGO.totalDonor = 0;
-        newNGO.totalValue = 0;
         newNGO.isRegistered = true;
-        newNGO.blacklisted = false;
-        return _idx;
+
+        emit NGORegistered(msg.sender, block.timestamp, _uri);
     }
 
-    // Function to donate to an NGO
-    function donate(uint256 _idx) external payable {
-        require(NGOs[_idx].isRegistered, "NGO is not registered");
-        require(!NGOs[_idx].blacklisted, "NGO is blacklisted");
+    function donate(address _ngo) external payable {
+        require(NGOs[_ngo].isRegistered, "NGO is not registered");
+        require(!NGOs[_ngo].blacklisted, "NGO is blacklisted");
         require(msg.value > 0, "Invalid value");
 
-        NGO storage ngo = NGOs[_idx];
-        ngo.totalValue += msg.value;
-        ngo.totalDonor++;
-        ngo.donors.push(msg.sender);
-        ngo.donation.push(msg.value);
-        Donations[msg.sender][_idx] += msg.value;
+        NGO storage ngx = NGOs[_ngo];
+        ngx.totalValue += msg.value;
+
+        if (Donations[msg.sender][_ngo] == 0) {
+            Donations[msg.sender][_ngo] = msg.value;
+            ngx.totalDonor++;
+            ngx.donors.push(msg.sender);
+        } else {
+            Donations[msg.sender][_ngo] += msg.value;
+        }
+
+        Donors[msg.sender].ngos.push(_ngo);
+
+        emit DonationMade(msg.sender, _ngo, msg.value);
     }
 
-    // Function to create a request for funds by the NGO owner
-    function createRequest(uint256 _idx, string memory _uri, address _recipient, uint256 _amount)
-        external
-        onlyNgo(_idx)
-    {
-        require(NGOs[_idx].totalValue >= _amount, "Insufficient funds for this request");
+    function createRequest(string memory _uri, address _recipient, uint256 _amount) external onlyNgo {
+        require(_recipient != address(0), "Recipient is zero address");
+        require(NGOs[msg.sender].totalValue >= _amount, "Insufficient funds for this request");
 
-        Request storage newRequest = requests.push();
+        Request storage newRequest = Requests[msg.sender].push();
         newRequest.uri = _uri;
         newRequest.amount = _amount;
         newRequest.recipient = _recipient;
         newRequest.completed = false;
         newRequest.approval = false;
-        newRequest.yesVotes = 0;
-        newRequest.noVotes = 0;
         newRequest.startTime = block.timestamp;
-        newRequest.endTime = block.timestamp + 2 days; // Voting lasts for 2 days
+        newRequest.endTime = block.timestamp + duration ;
         newRequest.finalized = false;
+
+        emit RequestCreated(msg.sender, Requests[msg.sender].length - 1, _uri, _amount);
     }
 
-    // Function to vote on a request by donors, with weight based on donations
-    function voteOnRequest(uint256 _idx, bool voteYes) external onlyDonor(_idx) {
-        Request storage request = requests[_idx];
+    function voteOnRequest(address _ngo, uint idx, bool voteYes) external onlyDonor(_ngo) {
+        require(!NGOs[_ngo].blacklisted, "NGO is blacklisted");
+
+        Request storage request = Requests[_ngo][idx];
         require(block.timestamp <= request.endTime, "Voting is closed.");
         require(!request.approvals[msg.sender], "You have already voted.");
 
-        // Calculate vote weight based on the donor's donation
-        uint256 voteWeight = Donations[msg.sender][_idx];
-
-        // Register the vote
+        uint256 voteWeight = Donations[msg.sender][_ngo];
         if (voteYes) {
             request.yesVotes += voteWeight;
         } else {
             request.noVotes += voteWeight;
         }
 
-        // Mark the donor as having voted
         request.approvals[msg.sender] = true;
+
+        emit VoteCast(msg.sender, idx, voteYes, voteWeight);
     }
 
-    // Function to finalize a request based on the voting result
-    function finalizeRequest(uint256 _requestIdx, uint256 _ngoIdx) external {
-        Request storage request = requests[_requestIdx];
-        NGO storage ngo = NGOs[_ngoIdx];
-
-        require(block.timestamp > request.endTime, "Voting period is not over.");
+    function finalizeRequest(uint256 _requestIdx) external onlyNgo {
+        Request storage request = Requests[msg.sender][_requestIdx];
         require(!request.finalized, "Request already finalized.");
+        require(block.timestamp > request.endTime, "Voting period is not over.");
 
+        NGO storage ngo = NGOs[msg.sender];
         uint256 totalVotes = request.yesVotes + request.noVotes;
         require(totalVotes > 0, "No votes were cast.");
 
-        // Check if more than 50% of the vote weight is 'yes'
         if (request.yesVotes * 2 > totalVotes) {
-            // Approve the request and transfer funds
             require(ngo.totalValue >= request.amount, "Not enough funds.");
-            payable(request.recipient).transfer(request.amount);
+            (bool success, ) = payable(request.recipient).call{value: request.amount}("");
+            require(success, "Transaction failed");
+            ngo.totalValue -= request.amount;
             request.completed = true;
             request.approval = true;
-            ngo.totalValue -= request.amount;
-        } else {
-            // Reject the request
-            request.completed = false;
-            request.approval = false;
         }
 
-        // Mark the request as finalized
         request.finalized = true;
-    }
-
-    // Function to get the number of requests
-    function getRequestCount() public view returns (uint256) {
-        return requests.length;
+        emit RequestFinalized(_requestIdx, request.approval);
     }
 }
