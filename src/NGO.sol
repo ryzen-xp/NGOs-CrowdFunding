@@ -2,20 +2,19 @@
 pragma solidity ^0.8.27;
 
 contract NGO_Funding {
-
     address public admin;
-    uint immutable duration = 0 days;
+    uint256 public duration;
 
-    constructor(uint _count) {
+    constructor(uint256 duration_sec) {
         admin = msg.sender;
-        duration = _count;
+        duration = duration_sec; // _count should be in seconds
     }
 
-    event NGORegistered(address indexed NGO_owner, uint index, string uri);
-    event DonationMade(address indexed donor, address indexed NGO_owner, uint amount);
-    event RequestCreated(address indexed NGO_owner, uint indexed requestIdx, string uri, uint amount);
-    event VoteCast(address indexed voter, uint indexed requestIdx, bool voteYes, uint voteWeight);
-    event RequestFinalized(uint indexed requestIdx, bool approved);
+    event NGORegistered(address indexed NGO_owner, uint256 index, string uri);
+    event DonationMade(address indexed donor, address indexed NGO_owner, uint256 amount);
+    event RequestCreated(address indexed NGO_owner, uint256 indexed requestIdx, string uri, uint256 amount);
+    event VoteCast(address indexed voter, uint256 indexed requestIdx, bool voteYes, uint256 voteWeight);
+    event RequestFinalized(uint256 indexed requestIdx, bool approved);
 
     modifier onlyNgo() {
         require(NGOs[msg.sender].isRegistered, "Only NGO owner can call this function");
@@ -65,8 +64,6 @@ contract NGO_Funding {
         return Donors[msg.sender].ngos;
     }
 
-  
-
     function register(string calldata _uri) external {
         require(!NGOs[msg.sender].isRegistered, "NGO already registered");
 
@@ -110,13 +107,13 @@ contract NGO_Funding {
         newRequest.completed = false;
         newRequest.approval = false;
         newRequest.startTime = block.timestamp;
-        newRequest.endTime = block.timestamp + duration ;
+        newRequest.endTime = block.timestamp + duration;
         newRequest.finalized = false;
 
         emit RequestCreated(msg.sender, Requests[msg.sender].length - 1, _uri, _amount);
     }
 
-    function voteOnRequest(address _ngo, uint idx, bool voteYes) external onlyDonor(_ngo) {
+    function voteOnRequest(address _ngo, uint256 idx, bool voteYes) external onlyDonor(_ngo) {
         require(!NGOs[_ngo].blacklisted, "NGO is blacklisted");
 
         Request storage request = Requests[_ngo][idx];
@@ -146,7 +143,7 @@ contract NGO_Funding {
 
         if (request.yesVotes * 2 > totalVotes) {
             require(ngo.totalValue >= request.amount, "Not enough funds.");
-            (bool success, ) = payable(request.recipient).call{value: request.amount}("");
+            (bool success,) = payable(request.recipient).call{value: request.amount}("");
             require(success, "Transaction failed");
             ngo.totalValue -= request.amount;
             request.completed = true;
