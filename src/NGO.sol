@@ -135,7 +135,7 @@ contract NGO_Funding {
     function finalizeRequest(uint256 _requestIdx) external onlyNgo {
         Request storage request = Requests[msg.sender][_requestIdx];
         require(!request.finalized, "Request already finalized.");
-        require(block.timestamp > request.endTime, "Voting period is not over.");
+        require(block.timestamp >= request.endTime, "Voting period is not over.");
 
         NGO storage ngo = NGOs[msg.sender];
         uint256 totalVotes = request.yesVotes + request.noVotes;
@@ -152,5 +152,15 @@ contract NGO_Funding {
 
         request.finalized = true;
         emit RequestFinalized(_requestIdx, request.approval);
+    }
+
+    function get_valByDonor(address _ngo) external view returns (uint256) {
+        require(address(_ngo) != address(0), "Zero add");
+        return Donations[msg.sender][_ngo];
+    }
+
+    function get_valByNGO(address _donor) external view returns (uint256) {
+        require(address(_donor) != address(0), "Zero add");
+        return Donations[msg.sender][_donor];
     }
 }
