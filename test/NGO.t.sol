@@ -189,6 +189,7 @@ contract NGOtest is Test {
             uint256 yesVotes,
             uint256 noVotes,
             ,
+            
             ,
             bool finalized
         ) = ngo.Requests(ngoowner, 0);
@@ -199,8 +200,7 @@ contract NGOtest is Test {
         assertTrue(approval);
         assertEq(yesVotes, 20 ether);
         assertEq(noVotes, 0);
-        // assertEq(startTime, block.timestamp);
-        // assertEq(endTime, block.timestamp );
+    
         assertTrue(finalized);
     }
 }
