@@ -66,7 +66,7 @@ contract NGOtest is Test {
         assertTrue(isRegistered);
         assertEq(totalValue, 20 ether);
         vm.prank(donor1);
-        uint256 amount = ngo.get_valByDonor(ngoowner);
+        uint256 amount = ngo.Donations(donor1, ngoowner);
         assertEq(amount, 20 ether);
     }
 
@@ -189,7 +189,6 @@ contract NGOtest is Test {
             uint256 yesVotes,
             uint256 noVotes,
             ,
-            
             ,
             bool finalized
         ) = ngo.Requests(ngoowner, 0);
@@ -200,7 +199,7 @@ contract NGOtest is Test {
         assertTrue(approval);
         assertEq(yesVotes, 20 ether);
         assertEq(noVotes, 0);
-    
+
         assertTrue(finalized);
     }
 }
