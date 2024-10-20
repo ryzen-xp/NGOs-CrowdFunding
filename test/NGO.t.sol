@@ -7,9 +7,10 @@ import {NGO_Funding} from "../src/NGO.sol";
 contract NGOtest is Test {
     NGO_Funding public ngo;
     uint256 public time = 1_000;
-    address public admin = address(1);
+    address public admin = address(this);
     address public ngoowner = address(2);
     address public donor1 = address(3);
+    address public donor2 = address(4);
     string public _uri = "http://ryzen-xp";
 
     event RequestCreated(address indexed NGO_owner, uint256 indexed requestIdx, string uri, uint256 amount);
@@ -201,5 +202,58 @@ contract NGOtest is Test {
         assertEq(noVotes, 0);
 
         assertTrue(finalized);
+    }
+
+    function test_Blacklist()external {
+         vm.prank(ngoowner); 
+        ngo.register("http://admin/com");
+        vm.prank(admin);
+        ngo.Blacklist(ngoowner);
+
+      
+        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue, bool isRegistered, bool blacklisted)
+        = ngo.NGOs(ngoowner);
+
+       
+        assertEq(uri, "http://admin/com");
+        assertEq(owner, ngoowner);
+        assertTrue(isRegistered);
+        assertEq(totalDonor, 0);
+        assertEq(totalValue, 0);
+        assertTrue(blacklisted);
+
+    }
+
+    function Test_ReleaseFund_Donor()external {
+        vm.prank(ngoowner);
+        ngo.register("https://example.com/ngo");
+        vm.prank(donor1);
+        vm.deal(donor1, 100 ether);
+        ngo.donate{value: 20 ether}(ngoowner);
+        vm.prank(donor2);
+        vm.deal(donor2 , 100 ether);
+        ngo.donate{value: 30 ether}(ngoowner);
+
+        vm.prank(admin);
+        ngo.ReleaseFund_Donor(ngoowner);
+
+        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue, bool isRegistered, bool blacklisted)
+        = ngo.NGOs(ngoowner);
+        assertEq(uri, "https://example.com/ngo");
+        assertEq(owner, ngoowner);
+        assertEq(totalDonor, 2);
+        assertTrue(blacklisted);
+
+        assertTrue(isRegistered);
+        assertEq(totalValue, 50 ether);
+        vm.prank(donor1);
+        uint256 amount = ngo.Donations(donor1, ngoowner);
+        assertEq(amount, 0 ether);
+          vm.prank(donor2);
+        uint256 amount2 = ngo.Donations(donor2, ngoowner);
+        assertEq(amount2, 0 ether);
+
+        // assertEq(donor1.balance() , 100 ether);
+
     }
 }
