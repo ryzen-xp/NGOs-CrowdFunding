@@ -11,12 +11,18 @@ contract NGO_Funding is ReentrancyGuard {
         admin = msg.sender;
         duration = duration_sec;
     }
+    enum status{
+        Unverified,
+        Verified,
+        Blocked
+
+    }
 
     // Events
     event NGORegistered(address indexed NGO_owner, uint256 index, string uri);
     event DonationMade(address indexed donor, address indexed NGO_owner, uint256 amount);
-    event RequestCreated(address indexed NGO_owner, uint256 indexed requestIdx, string uri, uint256 amount);
-    event VoteCast(address indexed voter, uint256 indexed requestIdx, bool voteYes, uint256 voteWeight);
+    event RequestCreated(address indexed NGO_owner, uint256  requestIdx, string uri, uint256 amount);
+    event VoteCast(address indexed voter, uint256  requestIdx, bool voteYes, uint256 voteWeight);
     event RequestFinalized(uint256 indexed requestIdx, bool approved);
 
     // Custom Errors for Gas Optimization
@@ -61,6 +67,7 @@ contract NGO_Funding is ReentrancyGuard {
         uint256 totalValue;
         bool isRegistered;
         bool blacklisted;
+        address[] Donors;
     }
 
     struct Request {
@@ -81,7 +88,7 @@ contract NGO_Funding is ReentrancyGuard {
     mapping(address => address[]) private Donors_ngo;
     mapping(address => mapping(address => uint256)) public Donations;
     mapping(address => Request[]) public Requests;
-    mapping(address => address[]) private Ngo_donor;
+    // mapping(address => address[]) private Ngo_donor;
 
     // Function to get the donor info
     function getDonorInfo() external view returns (address[] memory) {
@@ -121,7 +128,7 @@ contract NGO_Funding is ReentrancyGuard {
 
     // Create a funding request
     function createRequest(string calldata _uri, address _recipient, uint256 _amount) external onlyNgo {
-        NGO storage ngo = NGOs[msg.sender];
+        NGO memory  ngo = NGOs[msg.sender];
         if (_recipient == address(0)) revert ZeroAddress();
         if (ngo.totalValue < _amount) revert InsufficientFunds();
 
