@@ -1,6 +1,7 @@
-import Loader from "./components/loader";
+// import Loader from "./components/loader";
+import Navbar from "./components/Navbar";
 function App() {
-  return <Loader />;
+  return <Navbar />;
 }
 
 export default App;

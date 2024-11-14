@@ -5,8 +5,9 @@ pragma solidity ^0.8.27;
 contract NGO_Funding  {
     address public admin;
     uint256 public duration;
+    uint256 public fundReleaseTime = 7 days ;
 
-    constructor(uint256 duration_sec) {
+    constructor(uint256 duration_sec ) {
         admin = msg.sender;
         duration = duration_sec;
     }
@@ -27,6 +28,7 @@ contract NGO_Funding  {
     event VoteCast(address indexed voter, uint256 requestIdx, bool voteYes, uint256 voteWeight , address Ngo);
     event RequestFinalized(uint256 indexed requestIdx, address finalizer_address);
     event authorized_NGO(address );
+    event whilteList(address _ngo);
 
     // Custom Errors for Gas Optimization
     error ZeroAddress();
@@ -87,6 +89,8 @@ contract NGO_Funding  {
        
     }
 
+    mapping(address => uint256) public BlacklistTimestamp;
+
     mapping(address => NGO) public NGOs;
     mapping(address => address[]) private Donors_ngo;
     mapping(address => mapping(address => uint256)) public Donations;
@@ -114,7 +118,8 @@ contract NGO_Funding  {
 
     function Authorized_NGO(address _ngo)external {
          NGO storage newNGO = NGOs[_ngo];
-        require(newNGO.status != Status.Verified , "NGO already verified");
+        require(newNGO.status != Status.Unverified , "NGO already verified or blocked");
+        
         newNGO.status =Status.Verified ;
         emit authorized_NGO(_ngo );
     }
@@ -216,11 +221,29 @@ function createRequest(string calldata _uri, address _recipient, uint256 _amount
         if (ngo.status == Status.Blocked) revert BlacklistedNGO();
 
         ngo.status = Status.Blocked;
+        BlacklistTimestamp[_ngo]= block.timestamp;
+    }
+
+    function WhilteList(address _ngo ) external  onlyAdmin() {
+        if(_ngo == address(0) ){
+             revert ZeroAddress();
+        }
+        NGO storage ngo = NGOs[_ngo];
+        if(ngo.status == Status.Blocked){
+            ngo.status = Status.Unverified ;
+            BlacklistTimestamp[_ngo]= 0;
+        }
+        else{
+            revert NotBlacklistedNGO();
+        }
+        emit whilteList(_ngo );
     }
 
     // Release funds to donors in case of blacklisting
     function ReleaseFund_Donor(address _ngo) external onlyAdmin  {
         if (_ngo == address(0)) revert ZeroAddress();
+        require(BlacklistTimestamp[_ngo] > 0 );
+        require(BlacklistTimestamp[_ngo] + fundReleaseTime < block.timestamp , "Fund release time not reached");
 
         NGO storage ngo = NGOs[_ngo];
         
