@@ -28,6 +28,11 @@ contract NGOtest is Test {
         bool finalized;
         mapping(address => bool) approvals;
     }
+    //  enum Status {
+    //     Unverified,
+    //     Verified,
+    //     Blocked
+    // }
 
     function setUp() public {
         ngo = new NGO_Funding(time);
@@ -38,16 +43,16 @@ contract NGOtest is Test {
         ngo.register("http://admin/com");
 
         // Access the NGO struct for ngoowner and unpack the relevant fields
-        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue, bool isRegistered, bool blacklisted)
+        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue , NGO_Funding.Status status )
         = ngo.NGOs(ngoowner);
 
         // Check if the values match
         assertEq(uri, "http://admin/com");
         assertEq(owner, ngoowner);
-        assertTrue(isRegistered);
+         assertEq(uint(status), uint(NGO_Funding.Status.Unverified));
         assertEq(totalDonor, 0);
         assertEq(totalValue, 0);
-        assertEq(blacklisted, false);
+      
     }
 
     function test_donate() external {
@@ -57,14 +62,12 @@ contract NGOtest is Test {
         vm.deal(donor1, 100 ether);
         ngo.donate{value: 20 ether}(ngoowner);
 
-        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue, bool isRegistered, bool blacklisted)
+        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue , NGO_Funding.Status status )
         = ngo.NGOs(ngoowner);
         assertEq(uri, "https://example.com/ngo");
         assertEq(owner, ngoowner);
         assertEq(totalDonor, 1);
-        assertFalse(blacklisted);
-
-        assertTrue(isRegistered);
+           assertEq(uint(status), uint(NGO_Funding.Status.Verified));
         assertEq(totalValue, 20 ether);
         vm.prank(donor1);
         uint256 amount = ngo.Donations(donor1, ngoowner);

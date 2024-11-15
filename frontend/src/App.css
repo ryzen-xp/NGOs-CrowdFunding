@@ -1,0 +1,8 @@
+/* In your CSS file (e.g., App.css) */
+.background {
+  background-image: url("./assets/8035401.jpg"); /* Path is relative to the public folder */
+  background-size: cover;
+  background-position: center;
+  height: 100vh;
+  width: 100%;
+}

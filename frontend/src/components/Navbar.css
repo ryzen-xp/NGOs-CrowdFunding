@@ -1,0 +1,83 @@
+/* Basic navbar styles */
+.navbar {
+  background-color: #333;
+  padding: 10px;
+  color: rgb(251, 65, 65);
+  width: 100%; /* Ensure the navbar takes full width */
+  box-sizing: border-box; /* Include padding and border in width */
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  justify-content: flex-end; /* Align items to the right */
+  width: 100%; /* Ensure the navbar links fit within the available space */
+  flex-wrap: wrap; /* Allow items to wrap to the next line if necessary */
+  padding-right: 30px;
+  box-sizing: border-box; /* Include padding and borders in the width calculation */
+}
+
+.nav-links li {
+  position: relative;
+}
+
+/* Updated home link to meet the new requirements */
+.nav-link-home {
+  background-color: white; /* Set background color to white */
+  color: black; /* Set font color to black */
+  text-decoration: none; /* Remove underline */
+  padding: 7px 0px;
+  transition: background-color 0.3s ease, color 0.3s ease; /* Optional smooth transition */
+  border-radius: 4px;
+}
+
+.nav-link-home:hover {
+  color: white; /* Font color changes to white on hover */
+  background-color: black; /* Background color changes to black on hover */
+  border-radius: 4px; /* Optional border-radius for rounded corners on hover */
+}
+
+.nav-links a,
+.nav-button {
+  color: rgb(48, 45, 45);
+  text-decoration: none;
+  padding: 8px 12px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.nav-links a:hover,
+.nav-button:hover {
+  background-color: #5b5b5b;
+  border-radius: 4px;
+  color: white;
+}
+
+/* Dropdown menu styles */
+.dropdown-menu {
+  position: absolute;
+  top: 100%; /* Dropdown appears below the NGO link */
+  left: 0;
+  background-color: #333;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-menu li {
+  margin: 12px 0; /* Adds vertical space between dropdown items */
+}
+
+.dropdown-menu li a {
+  padding: 12px 20px; /* Increases padding for better spacing inside links */
+  color: white;
+}
+
+.dropdown-menu li a:hover {
+  background-color: #484848;
+}
