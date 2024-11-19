@@ -1,258 +1,163 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
-import {Test, console} from "forge-std/Test.sol";
-import {NGO_Funding} from "../src/NGO.sol";
+import "forge-std/Test.sol";
+import "../src/NGO.sol";
 
-contract NGOtest is Test {
-    NGO_Funding public ngo;
-    uint256 public time = 1_000;
-    address public admin = address(this);
-    address public ngoowner = address(2);
-    address public donor1 = address(3);
-    address public donor2 = address(4);
-    string public _uri = "http://ryzen-xp";
-
-    event RequestCreated(address indexed NGO_owner, uint256 indexed requestIdx, string uri, uint256 amount);
-
-    struct Request {
-        string uri;
-        uint256 amount;
-        address recipient;
-        bool completed;
-        bool approval;
-        uint256 yesVotes;
-        uint256 noVotes;
-        uint256 startTime;
-        uint256 endTime;
-        bool finalized;
-        mapping(address => bool) approvals;
-    }
-    //  enum Status {
-    //     Unverified,
-    //     Verified,
-    //     Blocked
-    // }
+contract NGO_FundingTest is Test {
+    NGO_Funding public ngoFunding;
+    address public admin = address(this); // Test admin address
+    address public ngo1 = address(0x1); // Test NGO address
+    address public ngo2 = address(0x2); // Test NGO address
+    address public donor1 = address(0x3); // Test donor address
+    address public donor2 = address(0x4); // Test donor address
 
     function setUp() public {
-        ngo = new NGO_Funding(time);
+        // Deploy the contract
+        ngoFunding = new NGO_Funding();
+        // Label addresses for easier debugging
+        vm.label(admin, "Admin");
+        vm.label(ngo1, "NGO 1");
+        vm.label(ngo2, "NGO 2");
+        vm.label(donor1, "Donor 1");
+        vm.label(donor2, "Donor 2");
     }
 
-    function test_register() external {
-        vm.prank(ngoowner); // Prank as ngoowner to register the NGO
-        ngo.register("http://admin/com");
+    function testRegisterNGO() public {
+        // Register NGO1
+        vm.startPrank(ngo1);
+        ngoFunding.register("NGO1_URI");
+        vm.stopPrank();
 
-        // Access the NGO struct for ngoowner and unpack the relevant fields
-        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue , NGO_Funding.Status status )
-        = ngo.NGOs(ngoowner);
-
-        // Check if the values match
-        assertEq(uri, "http://admin/com");
-        assertEq(owner, ngoowner);
-         assertEq(uint(status), uint(NGO_Funding.Status.Unverified));
-        assertEq(totalDonor, 0);
-        assertEq(totalValue, 0);
-      
+        // Assert that the NGO is registered
+        (string memory uri, address owner,,,,) = ngoFunding.NGOs(ngo1);
+        assertEq(uri, "NGO1_URI");
+        assertEq(owner, ngo1);
+        assertTrue(ngoFunding.registered(ngo1));
     }
 
-    function test_donate() external {
-        vm.prank(ngoowner);
-        ngo.register("https://example.com/ngo");
-        vm.prank(donor1);
-        vm.deal(donor1, 100 ether);
-        ngo.donate{value: 20 ether}(ngoowner);
+    function testDonate() public {
+        // Register NGO1
+        vm.startPrank(ngo1);
+        ngoFunding.register("NGO1_URI");
+        vm.stopPrank();
 
-        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue , NGO_Funding.Status status )
-        = ngo.NGOs(ngoowner);
-        assertEq(uri, "https://example.com/ngo");
-        assertEq(owner, ngoowner);
+        // Donate to NGO1
+        vm.deal(donor1, 10 ether); // Fund donor1
+        vm.startPrank(donor1);
+        ngoFunding.donate{value: 5 ether}(ngo1);
+        vm.stopPrank();
+
+        // Assert donation
+        (,, uint256 totalDonor, uint256 totalValue,,) = ngoFunding.NGOs(ngo1);
         assertEq(totalDonor, 1);
-           assertEq(uint(status), uint(NGO_Funding.Status.Verified));
-        assertEq(totalValue, 20 ether);
-        vm.prank(donor1);
-        uint256 amount = ngo.Donations(donor1, ngoowner);
-        assertEq(amount, 20 ether);
+        assertEq(totalValue, 5 ether);
+        assertEq(ngoFunding.Donations(donor1, ngo1), 5 ether);
     }
 
-    function test_createrequest() external {
-        vm.prank(ngoowner);
-        ngo.register("http://admin/com");
+    function testCreateRequest() public {
+        // Register NGO1
+        vm.startPrank(ngo1);
+        ngoFunding.register("NGO1_URI");
+        vm.stopPrank();
 
-        vm.prank(donor1);
-        vm.deal(donor1, 100 ether);
-        ngo.donate{value: 20 ether}(ngoowner);
+        // Donate to NGO1
+        vm.deal(donor1, 10 ether);
+        vm.startPrank(donor1);
+        ngoFunding.donate{value: 5 ether}(ngo1);
+        vm.stopPrank();
 
-        // Expect the request creation event
-        vm.prank(ngoowner);
-        vm.expectEmit(true, true, true, true); // Expect specific indexed values to match
-        emit RequestCreated(ngoowner, 0, _uri, 2 ether);
+        // Create a request
+        vm.startPrank(ngo1);
+        ngoFunding.createRequest("Request_URI", donor1, 2 ether);
+        vm.stopPrank();
 
-        // Create the request
-        ngo.createRequest(_uri, ngoowner, 2 ether);
-
-        // Check if the request was created correctly
-        (
-            string memory uri,
-            uint256 amount,
-            address recipient,
-            bool completed,
-            bool approval,
-            uint256 yesVotes,
-            uint256 noVotes,
-            uint256 startTime,
-            uint256 endTime,
-            bool finalized
-        ) = ngo.Requests(ngoowner, 0);
-
-        assertEq(uri, _uri);
+        // Assert request details
+        (string memory uri, uint256 amount, address recipient, bool completed,,,) = ngoFunding.Requests(ngo1, 0);
+        assertEq(uri, "Request_URI");
         assertEq(amount, 2 ether);
-        assertEq(recipient, ngoowner);
+        assertEq(recipient, donor1);
         assertFalse(completed);
-        assertFalse(approval);
-        assertEq(yesVotes, 0);
-        assertEq(noVotes, 0);
-        assertEq(startTime, block.timestamp);
-        assertEq(endTime, block.timestamp + ngo.duration());
-        assertFalse(finalized);
     }
 
-    function test_voteOnrequest() external {
-        vm.prank(ngoowner);
-        ngo.register("http://admin/com");
+    function testVoteOnRequest() public {
+        // Register NGO1
+        vm.startPrank(ngo1);
+        ngoFunding.register("NGO1_URI");
+        vm.stopPrank();
 
-        vm.prank(donor1);
-        vm.deal(donor1, 100 ether);
-        ngo.donate{value: 20 ether}(ngoowner);
+        // Donate to NGO1
+        vm.deal(donor1, 10 ether);
+        vm.startPrank(donor1);
+        ngoFunding.donate{value: 5 ether}(ngo1);
+        vm.stopPrank();
 
-        // Expect the request creation event
-        vm.prank(ngoowner);
-        vm.expectEmit(true, true, true, true);
-        emit RequestCreated(ngoowner, 0, _uri, 2 ether);
+        // Create a request
+        vm.startPrank(ngo1);
+        ngoFunding.createRequest("Request_URI", donor1, 2 ether);
+        vm.stopPrank();
 
-        ngo.createRequest(_uri, ngoowner, 2 ether);
+        // Vote on the request
+        vm.startPrank(donor1);
+        ngoFunding.voteOnRequest(ngo1, 0, true);
+        vm.stopPrank();
 
-        // Prank as donor and cast vote
-        vm.prank(donor1);
-        ngo.voteOnRequest(ngoowner, 0, true);
-
-        (
-            string memory uri,
-            uint256 amount,
-            address recipient,
-            bool completed,
-            bool approval,
-            uint256 yesVotes,
-            uint256 noVotes,
-            uint256 startTime,
-            uint256 endTime,
-            bool finalized
-        ) = ngo.Requests(ngoowner, 0);
-
-        // Ensure the request is updated correctly after voting
-        assertEq(uri, _uri);
-        assertEq(amount, 2 ether);
-        assertEq(recipient, ngoowner);
-        assertFalse(completed);
-        assertFalse(approval);
-        assertEq(yesVotes, 20 ether);
+        // Assert vote results
+        (,,,,, uint256 yesVotes, uint256 noVotes) = ngoFunding.Requests(ngo1, 0);
+        assertEq(yesVotes, 5 ether);
         assertEq(noVotes, 0);
-        assertEq(startTime, block.timestamp);
-        assertEq(endTime, block.timestamp + ngo.duration());
-        assertFalse(finalized);
     }
 
-    function test_finalizeRequest() external {
-        vm.prank(ngoowner);
-        ngo.register("http://admin/com");
+    function testBlacklistNGO() public {
+        // Register NGO1
+        vm.startPrank(ngo1);
+        ngoFunding.register("NGO1_URI");
+        vm.stopPrank();
 
-        vm.prank(donor1);
-        vm.deal(donor1, 100 ether);
-        ngo.donate{value: 20 ether}(ngoowner);
+        // Donate to NGO1
+        vm.deal(donor1, 10 ether);
+        vm.startPrank(donor1);
+        ngoFunding.donate{value: 5 ether}(ngo1);
+        vm.stopPrank();
 
-        // Expect the request creation event
-        vm.prank(ngoowner);
-        vm.expectEmit(true, true, true, true);
-        emit RequestCreated(ngoowner, 0, _uri, 2 ether);
+        // Vote to blacklist NGO1
+        vm.startPrank(donor1);
+        ngoFunding.voteToBlacklist(ngo1);
+        vm.stopPrank();
 
-        ngo.createRequest(_uri, ngoowner, 2 ether);
-
-        // Prank as donor and cast vote
-        vm.prank(donor1);
-        ngo.voteOnRequest(ngoowner, 0, true);
-
-        vm.prank(ngoowner);
-        vm.warp(block.timestamp + time);
-        ngo.finalizeRequest(0);
-
-        (
-            string memory uri,
-            uint256 amount,
-            address recipient,
-            bool completed,
-            bool approval,
-            uint256 yesVotes,
-            uint256 noVotes,
-            ,
-            ,
-            bool finalized
-        ) = ngo.Requests(ngoowner, 0);
-        assertEq(uri, _uri);
-        assertEq(amount, 2 ether);
-        assertEq(recipient, ngoowner);
-        assertTrue(completed);
-        assertTrue(approval);
-        assertEq(yesVotes, 20 ether);
-        assertEq(noVotes, 0);
-
-        assertTrue(finalized);
-    }
-
-    function test_Blacklist() external {
-        vm.prank(ngoowner);
-        ngo.register("http://admin/com");
-        vm.prank(admin);
-        ngo.Blacklist(ngoowner);
-
-        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue, bool isRegistered, bool blacklisted)
-        = ngo.NGOs(ngoowner);
-
-        assertEq(uri, "http://admin/com");
-        assertEq(owner, ngoowner);
-        assertTrue(isRegistered);
-        assertEq(totalDonor, 0);
-        assertEq(totalValue, 0);
+        // Assert blacklist status
+        (,,,, bool blacklisted,) = ngoFunding.NGOs(ngo1);
         assertTrue(blacklisted);
     }
 
-    function Test_ReleaseFund_Donor() external {
-        vm.prank(ngoowner);
-        ngo.register("https://example.com/ngo");
-        vm.prank(donor1);
-        vm.deal(donor1, 100 ether);
-        ngo.donate{value: 20 ether}(ngoowner);
-        vm.prank(donor2);
-        vm.deal(donor2, 100 ether);
-        ngo.donate{value: 30 ether}(ngoowner);
+    function testReleaseFundsOnBlacklist() public {
+        // Register NGO1
+        vm.startPrank(ngo1);
+        ngoFunding.register("NGO1_URI");
+        vm.stopPrank();
 
-        vm.prank(admin);
-        ngo.ReleaseFund_Donor(ngoowner);
+        // Donate to NGO1
+        vm.deal(donor1, 10 ether);
+        vm.deal(donor2, 10 ether);
+        vm.startPrank(donor1);
+        ngoFunding.donate{value: 5 ether}(ngo1);
+        vm.stopPrank();
 
-        (string memory uri, address owner, uint256 totalDonor, uint256 totalValue, bool isRegistered, bool blacklisted)
-        = ngo.NGOs(ngoowner);
-        assertEq(uri, "https://example.com/ngo");
-        assertEq(owner, ngoowner);
-        assertEq(totalDonor, 2);
-        assertTrue(blacklisted);
+        vm.startPrank(donor2);
+        ngoFunding.donate{value: 5 ether}(ngo1);
+        vm.stopPrank();
 
-        assertTrue(isRegistered);
-        assertEq(totalValue, 50 ether);
-        vm.prank(donor1);
-        uint256 amount = ngo.Donations(donor1, ngoowner);
-        assertEq(amount, 0 ether);
-        vm.prank(donor2);
-        uint256 amount2 = ngo.Donations(donor2, ngoowner);
-        assertEq(amount2, 0 ether);
+        // Vote to blacklist NGO1
+        vm.startPrank(donor1);
+        ngoFunding.voteToBlacklist(ngo1);
+        vm.stopPrank();
 
-        // assertEq(donor1.balance() , 100 ether);
+        vm.startPrank(donor2);
+        ngoFunding.voteToBlacklist(ngo1);
+        vm.stopPrank();
+
+        // Assert refunds to donors
+        assertEq(donor1.balance, 10 ether);
+        assertEq(donor2.balance, 10 ether);
     }
 }
