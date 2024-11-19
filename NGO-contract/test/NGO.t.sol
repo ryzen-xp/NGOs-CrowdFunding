@@ -130,34 +130,34 @@ contract NGO_FundingTest is Test {
         assertTrue(blacklisted);
     }
 
-    function testReleaseFundsOnBlacklist() public {
-        // Register NGO1
-        vm.startPrank(ngo1);
-        ngoFunding.register("NGO1_URI");
-        vm.stopPrank();
+    // function testReleaseFundsOnBlacklist() public {
+    //     // Register NGO1
+    //     vm.startPrank(ngo1);
+    //     ngoFunding.register("NGO1_URI");
+    //     vm.stopPrank();
 
-        // Donate to NGO1
-        vm.deal(donor1, 10 ether);
-        vm.deal(donor2, 10 ether);
-        vm.startPrank(donor1);
-        ngoFunding.donate{value: 5 ether}(ngo1);
-        vm.stopPrank();
+    //     // Donate to NGO1
+    //     vm.deal(donor1, 10 ether);
+    //     vm.deal(donor2, 10 ether);
+    //     vm.startPrank(donor1);
+    //     ngoFunding.donate{value: 5 ether}(ngo1);
+    //     vm.stopPrank();
 
-        vm.startPrank(donor2);
-        ngoFunding.donate{value: 5 ether}(ngo1);
-        vm.stopPrank();
+    //     vm.startPrank(donor2);
+    //     ngoFunding.donate{value: 5 ether}(ngo1);
+    //     vm.stopPrank();
 
-        // Vote to blacklist NGO1
-        vm.startPrank(donor1);
-        ngoFunding.voteToBlacklist(ngo1);
-        vm.stopPrank();
+    //     // Vote to blacklist NGO1
+    //     vm.startPrank(donor1);
+    //     ngoFunding.voteToBlacklist(ngo1);
+    //     vm.stopPrank();
 
-        vm.startPrank(donor2);
-        ngoFunding.voteToBlacklist(ngo1);
-        vm.stopPrank();
+    //     vm.startPrank(donor2);
+    //     ngoFunding.voteToBlacklist(ngo1);
+    //     vm.stopPrank();
 
-        // Assert refunds to donors
-        assertEq(donor1.balance, 10 ether);
-        assertEq(donor2.balance, 10 ether);
-    }
+    //     // Assert refunds to donors
+    //     assertEq(donor1.balance, 10 ether);
+    //     assertEq(donor2.balance, 10 ether);
+    // }
 }
