@@ -3,13 +3,13 @@ pragma solidity ^0.8.27;
 
 
 contract NGO_Funding  {
-    address public admin;
-    uint256 public duration;
-    uint256 public fundReleaseTime = 7 days ;
+    address private admin ;
+
+    
 
     constructor(uint256 duration_sec ) {
-        admin = msg.sender;
-        duration = duration_sec;
+         admin = msg.sender ;
+        
     }
 
     enum Status {
@@ -29,6 +29,8 @@ contract NGO_Funding  {
     event RequestFinalized(uint256 indexed requestIdx, address finalizer_address);
     event authorized_NGO(address );
     event whilteList(address _ngo);
+    event BlacklistVote(address , address ngo, uint  donorContribution, bool vote );
+    event NGOBlacklisted(address _ngo);
 
     // Custom Errors for Gas Optimization
     error ZeroAddress();
@@ -59,12 +61,7 @@ contract NGO_Funding  {
         _;
     }
 
-    modifier onlyAdmin() {
-        if (msg.sender != admin) {
-            revert AdminOnly();
-        }
-        _;
-    }
+ 
 
     struct NGO {
         string uri;
@@ -96,6 +93,7 @@ contract NGO_Funding  {
     mapping(address => mapping(address => uint256)) public Donations;
     mapping(address => Request[]) public Requests;
     // mapping(address => address[]) private Ngo_donor;
+     mapping(address => mapping(address => uint256)) public DonorBlacklistVotes;
 
     // Function to get the donor info
     function getDonorInfo() external view returns (address[] memory) {
@@ -116,13 +114,6 @@ contract NGO_Funding  {
         emit NGORegistered(msg.sender, block.timestamp, _uri);
     }
 
-    function Authorized_NGO(address _ngo)external {
-         NGO storage newNGO = NGOs[_ngo];
-        require(newNGO.status != Status.Unverified , "NGO already verified or blocked");
-        
-        newNGO.status =Status.Verified ;
-        emit authorized_NGO(_ngo );
-    }
 
     // Donate to an NGO
  function donate(address _ngo) external payable  {
@@ -165,85 +156,116 @@ function createRequest(string calldata _uri, address _recipient, uint256 _amount
     emit RequestCreated(msg.sender, Requests[msg.sender].length - 1, _uri, _amount);
 }
 
+// Vote on a request
+function voteOnRequest(address _ngo, uint256 idx, bool voteYes) external onlyDonor(_ngo) {
+    NGO storage ngo = NGOs[_ngo];
+    if (ngo.status == Status.Blocked) revert BlacklistedNGO();
 
-    // Vote on a request
-    function voteOnRequest(address _ngo, uint256 idx, bool voteYes) external onlyDonor(_ngo) {
+    Request storage request = Requests[_ngo][idx];
+    if (block.timestamp > request.startTime + 7 days) revert VotingPeriodOver();
+    if (request.approvals[msg.sender]) revert AlreadyVoted();
+
+    uint256 voteWeight = Donations[msg.sender][_ngo];
+    if (voteYes) {
+        request.yesVotes += voteWeight;
+    } else {
+        request.noVotes += voteWeight;
+    }
+
+    request.approvals[msg.sender] = true;
+
+    emit VoteCast(msg.sender, idx, voteYes, voteWeight, _ngo);
+
+    // Check if yes votes exceed 50% of the total votes and finalize automatically
+    uint256 totalVotes = request.yesVotes + request.noVotes;
+    if (totalVotes > 0 && request.yesVotes * 2 > totalVotes) {
+        finalizeRequestAutomatically(_ngo, idx);
+    }
+}
+   // Automatically finalize a request
+function finalizeRequestAutomatically(address _ngo, uint256 _requestIdx) internal {
+    Request storage request = Requests[_ngo][_requestIdx];
+    if (request.completed) return; // Skip if already completed
+
+    NGO storage ngo = NGOs[_ngo];
+    require(ngo.totalValue >= request.amount, "Insufficient funds for request");
+
+    (bool success, ) = request.recipient.call{value: request.amount}("");
+    if (!success) revert PaymentFailed();
+
+    ngo.totalValue -= request.amount;
+    request.completed = true;
+
+    emit RequestFinalized(_requestIdx, _ngo);
+}
+
+
+      // Vote to blacklist an NGO
+    function voteToBlacklist(address _ngo, bool vote) external onlyDonor(_ngo) {
         NGO storage ngo = NGOs[_ngo];
-        if (ngo.status == Status.Blocked ) revert BlacklistedNGO();
+        require(ngo.status == Status.Verified, "NGO is not active for voting");
 
-        Request storage request = Requests[_ngo][idx];
-        if (block.timestamp > request.startTime + duration) revert VotingPeriodOver();
-        if (request.approvals[msg.sender]) revert AlreadyVoted();
+        uint256 donorContribution = Donations[msg.sender][_ngo];
+        require(donorContribution > 0, "No contribution found");
+        require(!ngo.blacklistVotes[msg.sender], "Already voted");
 
-        uint256 voteWeight = Donations[msg.sender][_ngo];
-        if (voteYes) {
-            request.yesVotes += voteWeight;
+        if (vote) {
+            ngo.blacklistYesVotes += donorContribution;
         } else {
-            request.noVotes += voteWeight;
+            ngo.blacklistNoVotes += donorContribution;
         }
 
-        request.approvals[msg.sender] = true;
+        ngo.blacklistVotes[msg.sender] = true;
+        DonorBlacklistVotes[msg.sender][_ngo] = donorContribution;
 
-        emit VoteCast(msg.sender, idx, voteYes, voteWeight , _ngo);
-    }
+        emit BlacklistVote(msg.sender, _ngo, donorContribution, vote);
 
-    // Finalize a request
-    function finalizeRequest(uint256 _requestIdx) external onlyNgo  {
-        Request storage request = Requests[msg.sender][_requestIdx];
-        require(!request.completed , "Request proccessed");
-        require(block.timestamp > request.startTime + duration , "Voting Not Finish"  ); 
-         
-
-        NGO storage ngo = NGOs[msg.sender];
-        uint256 totalVotes = request.yesVotes + request.noVotes;
-        if (totalVotes == 0) revert InsufficientVotes();
-
-        if (request.yesVotes * 2 > totalVotes) {
-            if (ngo.totalValue < request.amount) revert InsufficientFunds();
-            (bool success,) = request.recipient.call{value: request.amount}("");
-            if (!success) revert PaymentFailed();
-            ngo.totalValue -= request.amount;
-            
-            
+        // Check if blacklist threshold is met
+        uint256 totalVotes = ngo.blacklistYesVotes + ngo.blacklistNoVotes;
+        if (ngo.blacklistYesVotes * 100 > totalVotes * 55) {
+            blacklistAndReleaseFunds(_ngo);
         }
-
-       request.completed = true;
-        emit RequestFinalized(_requestIdx, msg.sender );
     }
 
-
-    // Blacklist an NGO
-    function Blacklist(address _ngo) external onlyAdmin {
-        if (_ngo == address(0)) revert ZeroAddress();
-
+    // Retract blacklist vote
+    function retractBlacklistVote(address _ngo) external onlyDonor(_ngo) {
         NGO storage ngo = NGOs[_ngo];
-        if (ngo.status != Status.Verified) revert NotRegisteredNGO();
-        if (ngo.status == Status.Blocked) revert BlacklistedNGO();
+        require(ngo.blacklistVotes[msg.sender], "No vote found to retract");
+
+        uint256 donorContribution = DonorBlacklistVotes[msg.sender][_ngo];
+        if (donorContribution == 0) revert Unauthorized();
+
+        if (ngo.blacklistVotes[msg.sender]) {
+            ngo.blacklistYesVotes -= donorContribution;
+        } else {
+            ngo.blacklistNoVotes -= donorContribution;
+        }
+
+        ngo.blacklistVotes[msg.sender] = false;
+        DonorBlacklistVotes[msg.sender][_ngo] = 0;
+
+        emit BlacklistVote(msg.sender, _ngo, donorContribution, false);
+    }
+
+    // Blacklist NGO and release funds
+    function blacklistAndReleaseFunds(address _ngo) internal {
+        NGO storage ngo = NGOs[_ngo];
+        require(ngo.status == Status.Verified, "NGO is not active for blacklisting");
 
         ngo.status = Status.Blocked;
-        BlacklistTimestamp[_ngo]= block.timestamp;
+
+        // Release funds to donors
+         ReleaseFund_Donor(_ngo);
+
+        emit NGOBlacklisted(_ngo);
     }
 
-    function WhilteList(address _ngo ) external  onlyAdmin() {
-        if(_ngo == address(0) ){
-             revert ZeroAddress();
-        }
-        NGO storage ngo = NGOs[_ngo];
-        if(ngo.status == Status.Blocked){
-            ngo.status = Status.Unverified ;
-            BlacklistTimestamp[_ngo]= 0;
-        }
-        else{
-            revert NotBlacklistedNGO();
-        }
-        emit whilteList(_ngo );
-    }
 
     // Release funds to donors in case of blacklisting
-    function ReleaseFund_Donor(address _ngo) external onlyAdmin  {
+    function ReleaseFund_Donor(address _ngo) internal  {
         if (_ngo == address(0)) revert ZeroAddress();
         require(BlacklistTimestamp[_ngo] > 0 );
-        require(BlacklistTimestamp[_ngo] + fundReleaseTime < block.timestamp , "Fund release time not reached");
+        require(BlacklistTimestamp[_ngo] + 7 days  < block.timestamp , "Fund release time not reached");
 
         NGO storage ngo = NGOs[_ngo];
         
